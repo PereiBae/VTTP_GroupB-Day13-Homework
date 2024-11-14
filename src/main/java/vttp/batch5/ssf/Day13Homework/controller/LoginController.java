@@ -8,6 +8,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import vttp.batch5.ssf.Day13Homework.config.Constants;
 
 import java.util.Random;
 import java.util.logging.Logger;
@@ -16,35 +17,28 @@ import java.util.logging.Logger;
 @Validated
 public class LoginController {
 
-    private static final String USERNAME = "Brandon";
-    private static final String PASSWORD = "JustinBieber";
     private final Logger logger = Logger.getLogger(LoginController.class.getName());
 
-    // Handle both "/" and "/login" paths
     @GetMapping({"/", "/login"})
     public String showLoginPage(HttpSession session, Model model) {
-        Integer attempts = (Integer) session.getAttribute("loginAttempts");
-        logger.info("Session ID: " + session.getId());
-
+        Integer attempts = (Integer) session.getAttribute(Constants.LOGIN_ATTEMPTS);
         if (attempts == null) {
             attempts = 0;
-            session.setAttribute("loginAttempts", attempts); //Initialize attempts to 0
+            session.setAttribute(Constants.LOGIN_ATTEMPTS, attempts);
         }
-        boolean showCaptcha = attempts != null && attempts >= 2;
 
-        // Log the number of attempts and if CAPTCHA is displayed
-        logger.info("Displaying login page. Current login attempts: " + (attempts != null ? attempts : 0));
+        boolean showCaptcha = attempts >= Constants.SHOW_CAPTCHA_AFTER_ATTEMPTS;
+        logger.info("Displaying login page. Current login attempts: " + attempts);
 
-        // Only add CAPTCHA to model if it should be shown
         if (showCaptcha) {
-            logger.info("Captcha displayed");
-            model.addAttribute("captcha", session.getAttribute("captcha"));
+            logger.info("CAPTCHA is displayed for the user.");
+            model.addAttribute("captcha", session.getAttribute(Constants.CAPTCHA));
         }
-        model.addAttribute("showCaptcha", showCaptcha); // Tell view whether to show CAPTCHA
+
+        model.addAttribute("showCaptcha", showCaptcha);
         return "login";
     }
 
-    // processLogin Method (updated)
     @PostMapping("/login")
     public String processLogin(
             @RequestParam @NotBlank String username,
@@ -53,47 +47,41 @@ public class LoginController {
             HttpSession session,
             Model model) {
 
-        // Initialize or update loginAttempts in the session
-        Integer attempts = (Integer) session.getAttribute("loginAttempts");
+        Integer attempts = (Integer) session.getAttribute(Constants.LOGIN_ATTEMPTS);
         if (attempts == null) attempts = 0;
 
         attempts++;
-        session.setAttribute("loginAttempts", attempts); // Update attempts in session
+        session.setAttribute(Constants.LOGIN_ATTEMPTS, attempts);
+        logger.info("Login attempt #" + attempts);
 
-        logger.info("Login attempt count: " + attempts);
+        boolean isCaptchaRequired = attempts >= Constants.MAX_ATTEMPTS;
+        String captcha = (String) session.getAttribute(Constants.CAPTCHA);
 
-        boolean isCaptchaRequired = attempts >= 3;
-        String captcha = (String) session.getAttribute("captcha");
-
-        // Check username, password, and CAPTCHA (if required)
-        if (USERNAME.equals(username) && PASSWORD.equals(password) &&
+        if (Constants.USERNAME.equals(username) && Constants.PASSWORD.equals(password) &&
                 (!isCaptchaRequired || (captcha != null && captcha.equalsIgnoreCase(captchaInput)))) {
-            session.invalidate();  // Clear session on successful login
+            session.invalidate();
             return "redirect:/secret";
         }
 
-        // If max attempts reached, redirect to lockout
-        if (attempts >= 3) {
+        if (attempts >= Constants.MAX_ATTEMPTS) {
             session.invalidate();
             return "redirect:/locked";
         }
 
-        // Set CAPTCHA in session if this is the third attempt
-        if (attempts == 2) {
+        if (attempts == Constants.SHOW_CAPTCHA_AFTER_ATTEMPTS) {
             captcha = generateCaptcha();
-            session.setAttribute("captcha", captcha);
+            session.setAttribute(Constants.CAPTCHA, captcha);
             model.addAttribute("captcha", captcha);
             model.addAttribute("showCaptcha", true);
-            logger.info("Captcha generated and displayed for the user: " + captcha);
+            logger.info("CAPTCHA generated and displayed for the user.");
         } else {
-            model.addAttribute("showCaptcha", attempts >= 2);
+            model.addAttribute("showCaptcha", attempts >= Constants.SHOW_CAPTCHA_AFTER_ATTEMPTS);
         }
 
         model.addAttribute("error", "Invalid login attempt");
         return "login";
     }
 
-    // Method to generate a random CAPTCHA string
     private String generateCaptcha() {
         String characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
         Random random = new Random();
